@@ -2,83 +2,139 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAssignments, getCommsTyping, setCommsTyping } from '../../lib/store';
 import {
-  getAssignments,
-  getCommsChannels,
-  getCommsMessages,
-  getCommsPresence,
-  getCommsTyping,
-  getCommsUnreadCount,
-  markCommsRead,
-  sendCommsChirp,
-  sendCommsText,
-  setCommsPresence,
-  setCommsTyping,
-} from '../../lib/store';
-import type { CommsChannel } from '../../types';
+  fetchCommsChannels,
+  fetchCommsMessages,
+  fetchCommsPresence,
+  patchCommsPresence,
+  postCommsChirp,
+  postCommsText,
+  postMarkCommsRead,
+} from '../../lib/commsApi';
+import type { CommsChannel, CommsMessage, CommsPresence } from '../../types';
 import { toastError, toastInfo, toastSuccess } from '../../lib/toasts';
+
+async function toDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 export function CommsHub() {
   const { user } = useAuth();
+  const [source, setSource] = useState<'api' | 'local'>('local');
   const [channels, setChannels] = useState<CommsChannel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string>('');
   const [draft, setDraft] = useState('');
-  const [tick, setTick] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [messagesByChannel, setMessagesByChannel] = useState<Record<string, CommsMessage[]>>({});
+  const [presenceByUser, setPresenceByUser] = useState<Record<string, CommsPresence>>({});
+  const [unreadByChannel, setUnreadByChannel] = useState<Record<string, number>>({});
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const typingTimeoutRef = useRef<number | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const lastNotifyRef = useRef<string>('');
 
-  const refresh = () => {
-    const nextChannels = getCommsChannels();
-    setChannels(nextChannels);
-    if (!activeChannelId && nextChannels.length > 0) {
-      setActiveChannelId(nextChannels[0].id);
+  const assignments = getAssignments();
+
+  const pull = async () => {
+    if (!user) return;
+
+    const channelsResult = await fetchCommsChannels(user);
+    setSource(channelsResult.source);
+    setChannels(channelsResult.data);
+
+    if (!activeChannelId && channelsResult.data.length > 0) {
+      setActiveChannelId(channelsResult.data[0].id);
+    }
+
+    const presenceResult = await fetchCommsPresence(user);
+    const presenceMap: Record<string, CommsPresence> = {};
+    presenceResult.data.forEach((p) => {
+      presenceMap[p.userId] = p;
+    });
+    setPresenceByUser(presenceMap);
+
+    const ids = channelsResult.data.map((c) => c.id);
+    const messagePairs = await Promise.all(ids.map((channelId) => fetchCommsMessages(user, channelId)));
+
+    const nextMessagesByChannel: Record<string, CommsMessage[]> = {};
+    const nextUnread: Record<string, number> = {};
+
+    ids.forEach((channelId, idx) => {
+      const rows = messagePairs[idx]?.data ?? [];
+      nextMessagesByChannel[channelId] = rows;
+      nextUnread[channelId] = rows.filter(
+        (m) => m.senderUserId !== user.userId && !m.readByUserIds.includes(user.userId)
+      ).length;
+    });
+
+    setMessagesByChannel(nextMessagesByChannel);
+    setUnreadByChannel(nextUnread);
+
+    const activeMessages = nextMessagesByChannel[activeChannelId] ?? [];
+    const latestIncoming = [...activeMessages]
+      .reverse()
+      .find((m) => m.senderUserId !== user.userId && !m.readByUserIds.includes(user.userId));
+
+    if (
+      latestIncoming &&
+      document.visibilityState !== 'visible' &&
+      latestIncoming.id !== lastNotifyRef.current &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      new Notification(`New message from ${latestIncoming.senderName}`, {
+        body: latestIncoming.type === 'chirp' ? 'Sent a chirp audio clip' : latestIncoming.body ?? 'New message',
+      });
+      lastNotifyRef.current = latestIncoming.id;
     }
   };
 
   useEffect(() => {
-    refresh();
-  }, []);
-
-  useEffect(() => {
     if (!user) return;
-    setCommsPresence(user, 'online');
-    const interval = window.setInterval(() => {
-      setTick((x) => x + 1);
-    }, 2000);
+
+    patchCommsPresence(user, 'online');
+    pull();
+
+    pollRef.current = window.setInterval(() => {
+      pull();
+    }, 3000);
+
     return () => {
-      window.clearInterval(interval);
-      setCommsPresence(user, 'away');
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      patchCommsPresence(user, 'away');
     };
   }, [user]);
 
   useEffect(() => {
     if (!user || !activeChannelId) return;
-    markCommsRead(activeChannelId, user.userId);
-    setTick((x) => x + 1);
+    postMarkCommsRead(user, activeChannelId);
+    pull();
   }, [user, activeChannelId]);
 
-  const messages = useMemo(
-    () => (activeChannelId ? getCommsMessages(activeChannelId) : []),
-    [activeChannelId, tick]
-  );
-  const presenceMap = useMemo(
-    () => new Map(getCommsPresence().map((p) => [p.userId, p])),
-    [tick]
-  );
+  useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') Notification.requestPermission();
+  }, []);
+
+  const messages = useMemo(() => messagesByChannel[activeChannelId] ?? [], [messagesByChannel, activeChannelId]);
   const typing = useMemo(
     () => (activeChannelId && user ? getCommsTyping(activeChannelId, user.userId) : []),
-    [activeChannelId, user, tick]
+    [activeChannelId, user, draft]
   );
-
-  const assignments = getAssignments();
 
   if (!user) return null;
 
   const activeChannel = channels.find((c) => c.id === activeChannelId) ?? null;
 
-  function submitText() {
+  async function submitText() {
     if (!activeChannelId || !user) return;
     const mentionMatches = Array.from(draft.matchAll(/@(\w[\w-]+)/g)).map((x) => x[1]);
     const mentionUserIds = assignments
@@ -89,14 +145,13 @@ export function CommsHub() {
       )
       .map((a) => a.userId);
 
-    const result = sendCommsText(activeChannelId, user, draft, mentionUserIds);
-    if (!result) return;
+    const result = await postCommsText(user, activeChannelId, draft, mentionUserIds);
+    if (!result.data) return;
 
     setDraft('');
     setCommsTyping(activeChannelId, user, false);
-    markCommsRead(activeChannelId, user.userId);
-    refresh();
-    setTick((x) => x + 1);
+    await postMarkCommsRead(user, activeChannelId);
+    await pull();
   }
 
   function onDraftChange(value: string) {
@@ -130,16 +185,13 @@ export function CommsHub() {
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const msg = sendCommsChirp(activeChannelId, user, url);
-        if (msg) {
-          toastSuccess('Chirp sent');
-          refresh();
-          setTick((x) => x + 1);
-        }
+        const dataUrl = await toDataUrl(blob);
+        await postCommsChirp(user, activeChannelId, dataUrl);
+        toastSuccess('Chirp sent');
         stream.getTracks().forEach((t) => t.stop());
+        await pull();
       };
       recorderRef.current = recorder;
       recorder.start();
@@ -149,13 +201,12 @@ export function CommsHub() {
     }
   }
 
-  function uploadChirp(file?: File) {
+  async function uploadChirp(file?: File) {
     if (!file || !activeChannelId || !user) return;
-    const url = URL.createObjectURL(file);
-    sendCommsChirp(activeChannelId, user, url);
+    const dataUrl = await toDataUrl(file);
+    await postCommsChirp(user, activeChannelId, dataUrl);
     toastSuccess('Chirp uploaded');
-    refresh();
-    setTick((x) => x + 1);
+    await pull();
   }
 
   const participant = assignments.find((a) => a.userId !== user.userId);
@@ -166,9 +217,12 @@ export function CommsHub() {
   return (
     <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
       <aside className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2">
-        <h2 className="text-sm font-semibold text-slate-300 px-1">Channels</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-300 px-1">Channels</h2>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">{source}</span>
+        </div>
         {channels.map((channel) => {
-          const unread = getCommsUnreadCount(user.userId, channel.id);
+          const unread = unreadByChannel[channel.id] ?? 0;
           return (
             <button
               key={channel.id}
@@ -232,7 +286,7 @@ export function CommsHub() {
           {messages.length === 0 && <p className="text-sm text-slate-500">No messages yet.</p>}
           {messages.map((m) => {
             const mine = m.senderUserId === user.userId;
-            const presence = presenceMap.get(m.senderUserId);
+            const presence = presenceByUser[m.senderUserId];
             return (
               <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div

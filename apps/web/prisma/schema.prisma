@@ -29,6 +29,10 @@ model User {
   tasks         Task[]          @relation("AssignedTasks")
   notifications Notification[]
   gamification  Gamification?
+  commsMemberships CommsChannelMember[]
+  commsMessages    CommsMessage[]
+  commsReads       CommsMessageRead[]
+  commsPresence    CommsPresence?
 }
 
 model Category {
@@ -101,4 +105,56 @@ model Gamification {
   level     Int    @default(1)
   streak    Int    @default(0)
   user      User   @relation(fields: [userId], references: [id])
+}
+
+model CommsChannel {
+  id            String              @id @default(cuid())
+  name          String
+  description   String              @default("")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  members       CommsChannelMember[]
+  messages      CommsMessage[]
+}
+
+model CommsChannelMember {
+  channelId     String
+  userId        String
+  joinedAt      DateTime    @default(now())
+  channel       CommsChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+}
+
+model CommsMessage {
+  id            String              @id @default(cuid())
+  channelId     String
+  senderUserId  String
+  type          String              @default("text")
+  body          String              @default("")
+  audioUrl      String?
+  durationSec   Int?
+  mentionsJson  String?
+  createdAt     DateTime            @default(now())
+  channel       CommsChannel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender        User                @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  reads         CommsMessageRead[]
+}
+
+model CommsMessageRead {
+  messageId     String
+  userId        String
+  readAt        DateTime     @default(now())
+  message       CommsMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+}
+
+model CommsPresence {
+  userId       String    @id
+  status       String    @default("offline")
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

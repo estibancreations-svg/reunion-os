@@ -16,16 +16,47 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const SESSION_KEY = 'reunion.v3.session';
+const SESSION_VERSION = 1;
+const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+
+function isRoleTier(value: unknown): value is RoleTier {
+  return ['SUPER_ADMIN', 'COMMITTEE_CHAIR', 'VOLUNTEER', 'GUEST', 'MEMBER'].includes(String(value));
+}
+
+function parseSession(raw: string | null): SessionUser | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<SessionUser>;
+    if (!parsed || typeof parsed.userId !== 'string' || !isRoleTier(parsed.roleTier)) return null;
+    const expiresAt = parsed.expiresAt ? new Date(parsed.expiresAt) : null;
+    if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) return null;
+    return {
+      userId: parsed.userId,
+      fullName: parsed.fullName ?? parsed.name ?? parsed.userId,
+      name: parsed.name ?? parsed.fullName ?? parsed.userId,
+      email: parsed.email,
+      roleTier: parsed.roleTier,
+      assignmentId: parsed.assignmentId,
+      sessionVersion: parsed.sessionVersion ?? SESSION_VERSION,
+      issuedAt: parsed.issuedAt,
+      expiresAt: parsed.expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (raw) setUser(JSON.parse(raw));
-    } catch { /* ignore */ }
+    const session = parseSession(localStorage.getItem(SESSION_KEY));
+    if (session) {
+      setUser(session);
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
     setIsLoading(false);
   }, []);
 
@@ -39,6 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: assignment.profile?.email,
       roleTier: assignment.roleTier ?? 'VOLUNTEER',
       assignmentId: assignment.assignmentId ?? assignment.id,
+      sessionVersion: SESSION_VERSION,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     setUser(session);

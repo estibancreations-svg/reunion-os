@@ -47,6 +47,9 @@ export interface SessionUser {
   email?: string;
   roleTier: RoleTier;
   assignmentId?: string;
+  sessionVersion?: number;
+  issuedAt?: string;
+  expiresAt?: string;
 }
 
 export interface UserAssignment {
