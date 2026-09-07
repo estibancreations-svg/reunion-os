@@ -71,9 +71,9 @@ export default function PunchListPage() {
       <div className="space-y-4">
         <GameHUD profile={profile ?? assignment.gamification ?? defaultGamification(assignment.userId)} />
         <PersonalPunchList
-          userFullName={assignment.profile.fullName}
+          userFullName={assignment.profile?.fullName ?? assignment.userName ?? assignment.userId}
           userTitle={assignment.title}
-          assignedCategories={assignment.assignedCategories}
+          assignedCategories={assignment.assignedCategories ?? []}
           punchListItems={tasks}
           onUploadProof={handleUpload}
           onStatusChange={handleStatus}

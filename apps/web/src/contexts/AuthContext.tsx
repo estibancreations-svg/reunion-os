@@ -34,10 +34,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!assignment) return;
     const session: SessionUser = {
       userId: assignment.userId,
-      fullName: assignment.profile.fullName,
-      email: assignment.profile.email,
-      roleTier: assignment.roleTier,
-      assignmentId: assignment.assignmentId,
+      fullName: assignment.profile?.fullName ?? assignment.userName ?? assignment.userId,
+      name: assignment.profile?.fullName ?? assignment.userName ?? assignment.userId,
+      email: assignment.profile?.email,
+      roleTier: assignment.roleTier ?? 'VOLUNTEER',
+      assignmentId: assignment.assignmentId ?? assignment.id,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     setUser(session);

@@ -28,9 +28,9 @@ export default function NotificationsPage() {
         )}
         {items.map((n) => (
           <button
-            key={n.notificationId}
+            key={n.notificationId ?? n.id}
             onClick={() => {
-              markNotificationRead(n.notificationId);
+              markNotificationRead(n.notificationId ?? n.id);
               setItems(getNotifications(user.userId));
               if (n.link) router.push(n.link);
             }}

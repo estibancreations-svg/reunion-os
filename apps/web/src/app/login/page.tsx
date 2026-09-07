@@ -34,9 +34,9 @@ export default function LoginPage() {
             className="w-full text-left px-5 py-4 bg-[#1A1615] border border-[#3F3A36] rounded-xl hover:border-[#C84B31] transition flex justify-between items-center"
           >
             <div>
-              <div className="font-semibold text-[#FDFBF7]">{a.profile.fullName}</div>
+              <div className="font-semibold text-[#FDFBF7]">{a.profile?.fullName ?? a.userName ?? a.userId}</div>
               <div className="text-xs text-[#A89F91]">
-                {a.title} · {a.roleTier.replace(/_/g, ' ')}
+                {a.title} · {(a.roleTier ?? 'VOLUNTEER').replace(/_/g, ' ')}
               </div>
             </div>
             <span className="text-[#C84B31] text-sm font-bold">Enter →</span>

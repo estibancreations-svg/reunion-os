@@ -10,15 +10,17 @@ import type {
   Notification,
   TaskStatus,
   IntakeSession,
-  IntakeAnswer,
   SystemHealth,
   GamificationProfile,
   Achievement,
   LeaderboardEntry,
   ActivityEvent,
-} from "@/types";
+  BadgeId,
+} from '@/types';
+import { awardXp, checkAchievements, defaultGamification, levelFromXp, leaderboardSort } from './gamification';
+import { getSeedPayload, SEED_PROFILES } from './seed';
 
-const STORAGE_KEY = "reunion-os-v5";
+const STORAGE_KEY = 'reunion-os-v5';
 
 interface StoreState {
   assignments: UserAssignment[];
@@ -41,7 +43,7 @@ function defaultState(): StoreState {
     notifications: [],
     intakeSessions: [],
     health: {
-      status: "healthy",
+      status: 'healthy',
       lastCheck: new Date().toISOString(),
       db: true,
       auth: true,
@@ -54,19 +56,141 @@ function defaultState(): StoreState {
   };
 }
 
+function normalizeCategory(c: OperationalCategory): OperationalCategory {
+  return {
+    ...c,
+    id: c.id ?? c.categoryId ?? `cat-${Date.now()}`,
+    categoryId: c.categoryId ?? c.id,
+    sortOrder: c.sortOrder ?? c.order ?? 0,
+    order: c.order ?? c.sortOrder ?? 0,
+    color: c.color ?? '#C84B31',
+    isActive: c.isActive ?? true,
+    isCustom: c.isCustom ?? false,
+  };
+}
+
+function normalizeAssignment(a: UserAssignment): UserAssignment {
+  const id = a.assignmentId ?? a.id;
+  const categoryId = a.categoryId ?? a.assignedCategories?.[0]?.categoryId ?? 'cat-ops';
+  const categoryName =
+    a.categoryName ?? a.assignedCategories?.[0]?.name ?? (categoryId === 'cat-ops' ? 'Operations' : categoryId);
+
+  return {
+    ...a,
+    id,
+    assignmentId: id,
+    roleTier: a.roleTier ?? ((a.role?.toUpperCase().replace(/\s+/g, '_') as UserAssignment['roleTier']) ?? 'VOLUNTEER'),
+    title: a.title ?? a.role ?? 'Contributor',
+    profile: a.profile ?? {
+      fullName: a.userName ?? a.userId,
+      email: `${a.userId}@reunion.demo`,
+    },
+    assignedCategories:
+      a.assignedCategories ??
+      [{
+        categoryId,
+        name: categoryName,
+        color: '#C84B31',
+      }],
+    categoryId,
+    categoryName,
+    depositStatus: a.depositStatus ?? {
+      requiredAmount: 0,
+      receivedAmount: 0,
+      status: 'PAID',
+    },
+  };
+}
+
+function normalizeTask(item: PunchListItem): PunchListItem {
+  const id = item.taskId ?? item.id;
+  return {
+    ...item,
+    id,
+    taskId: id,
+    status: item.status ?? 'TODO',
+    uploadedProofUrls: item.uploadedProofUrls ?? [],
+    updatedAt: item.updatedAt ?? new Date().toISOString(),
+    createdAt: item.createdAt ?? new Date().toISOString(),
+  };
+}
+
+function normalizeNotification(n: Notification): Notification {
+  const id = n.notificationId ?? n.id;
+  const read = n.read ?? Boolean(n.readAt);
+  return {
+    ...n,
+    id,
+    notificationId: id,
+    severity: n.severity ?? 'INFO',
+    read,
+    readAt: n.readAt ?? (read ? n.createdAt : null),
+  };
+}
+
+function normalizeProfile(p: Partial<GamificationProfile> & { userId: string }): GamificationProfile {
+  const points = p.points ?? p.xp ?? 0;
+  const currentStreak = p.currentStreak ?? p.streak ?? 0;
+  const badges = (p.badges ?? []) as BadgeId[];
+  return {
+    ...defaultGamification(p.userId, p.fullName ?? p.name),
+    ...p,
+    points,
+    xp: points,
+    level: p.level ?? levelFromXp(points),
+    currentStreak,
+    streak: currentStreak,
+    tasksCompleted: p.tasksCompleted ?? 0,
+    badges,
+  };
+}
+
+function seedFromDefaults(state: StoreState): StoreState {
+  if (state.assignments.length > 0) return state;
+  const seed = getSeedPayload();
+  const assignments = seed.assignments.map((a) => normalizeAssignment(a));
+  const categories = seed.categories.map((c) => normalizeCategory(c));
+  const punchItems = seed.punchItems.map((t) => normalizeTask(t));
+  const notifications = seed.notifications.map((n) => normalizeNotification(n));
+  const profiles = SEED_PROFILES.map((p) =>
+    normalizeProfile({
+      userId: p.id,
+      fullName: p.name,
+      points: p.xp ?? 0,
+      level: p.level,
+      currentStreak: p.streak ?? 0,
+      tasksCompleted: punchItems.filter((x) => x.userId === p.id && (x.status === 'done' || x.status === 'completed' || x.status === 'DONE' || x.status === 'COMPLETED')).length,
+    })
+  );
+  return {
+    ...state,
+    assignments,
+    categories,
+    punchItems,
+    notifications,
+    profiles,
+  };
+}
+
 function load(): StoreState {
-  if (typeof window === "undefined") return defaultState();
+  if (typeof window === 'undefined') return defaultState();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    return { ...defaultState(), ...JSON.parse(raw) };
+    if (!raw) return seedFromDefaults(defaultState());
+    const parsed = { ...defaultState(), ...JSON.parse(raw) } as StoreState;
+    parsed.assignments = parsed.assignments.map((a) => normalizeAssignment(a));
+    parsed.categories = parsed.categories.map((c) => normalizeCategory(c));
+    parsed.punchItems = parsed.punchItems.map((t) => normalizeTask(t));
+    parsed.notifications = parsed.notifications.map((n) => normalizeNotification(n));
+    parsed.profiles = parsed.profiles.map((p) => normalizeProfile(p));
+    return seedFromDefaults(parsed);
   } catch {
-    return defaultState();
+    return seedFromDefaults(defaultState());
   }
 }
 
 function save(state: StoreState) {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -93,7 +217,6 @@ export const store = {
   getState,
   setState,
 
-  // ——— Auth / session ———
   setCurrentUser(userId: string | null) {
     setState({ currentUserId: userId });
   },
@@ -101,95 +224,80 @@ export const store = {
     return getState().currentUserId;
   },
 
-  // ——— Assignments ———
   getAssignments() {
     return getState().assignments;
   },
   upsertAssignment(a: UserAssignment) {
+    const normalized = normalizeAssignment(a);
     const list = getState().assignments;
-    const idx = list.findIndex((x) => x.id === a.id);
-    const next =
-      idx >= 0
-        ? list.map((x, i) => (i === idx ? a : x))
-        : [...list, a];
+    const idx = list.findIndex((x) => (x.assignmentId ?? x.id) === normalized.assignmentId);
+    const next = idx >= 0 ? list.map((x, i) => (i === idx ? normalized : x)) : [...list, normalized];
     setState({ assignments: next });
-    return a;
+    return normalized;
   },
   deleteAssignment(id: string) {
     setState({
-      assignments: getState().assignments.filter((x) => x.id !== id),
+      assignments: getState().assignments.filter((x) => (x.assignmentId ?? x.id) !== id),
     });
   },
 
-  // ——— Punch list ———
   getPunchItems(userId?: string) {
     const items = getState().punchItems;
     return userId ? items.filter((i) => i.userId === userId) : items;
   },
   upsertPunchItem(item: PunchListItem) {
+    const normalized = normalizeTask(item);
     const list = getState().punchItems;
-    const idx = list.findIndex((x) => x.id === item.id);
-    const next =
-      idx >= 0
-        ? list.map((x, i) => (i === idx ? item : x))
-        : [...list, item];
+    const idx = list.findIndex((x) => (x.taskId ?? x.id) === normalized.taskId);
+    const next = idx >= 0 ? list.map((x, i) => (i === idx ? normalized : x)) : [...list, normalized];
     setState({ punchItems: next });
-    return item;
+    return normalized;
   },
   updatePunchStatus(id: string, status: TaskStatus) {
     const list = getState().punchItems.map((x) =>
-      x.id === id ? { ...x, status, updatedAt: new Date().toISOString() } : x
+      (x.taskId ?? x.id) === id ? { ...x, status, updatedAt: new Date().toISOString() } : x
     );
     setState({ punchItems: list });
   },
 
-  // ——— Categories ———
   getCategories() {
     return getState().categories;
   },
   upsertCategory(c: OperationalCategory) {
+    const normalized = normalizeCategory(c);
     const list = getState().categories;
-    const idx = list.findIndex((x) => x.id === c.id);
-    const next =
-      idx >= 0
-        ? list.map((x, i) => (i === idx ? c : x))
-        : [...list, c];
+    const idx = list.findIndex((x) => (x.categoryId ?? x.id) === normalized.categoryId);
+    const next = idx >= 0 ? list.map((x, i) => (i === idx ? normalized : x)) : [...list, normalized];
     setState({ categories: next });
-    return c;
+    return normalized;
   },
 
-  // ——— Notifications ———
   getNotifications(userId?: string) {
     const n = getState().notifications;
     return userId ? n.filter((x) => x.userId === userId) : n;
   },
   addNotification(n: Notification) {
-    setState({ notifications: [n, ...getState().notifications] });
+    setState({ notifications: [normalizeNotification(n), ...getState().notifications] });
   },
   markNotificationRead(id: string) {
     setState({
       notifications: getState().notifications.map((x) =>
-        x.id === id ? { ...x, read: true } : x
+        (x.notificationId ?? x.id) === id ? { ...x, read: true, readAt: new Date().toISOString() } : x
       ),
     });
   },
 
-  // ——— Intake ———
   getIntakeSessions() {
     return getState().intakeSessions;
   },
   saveIntakeSession(session: IntakeSession) {
     const list = getState().intakeSessions;
     const idx = list.findIndex((x) => x.id === session.id);
-    const next =
-      idx >= 0
-        ? list.map((x, i) => (i === idx ? session : x))
-        : [...list, session];
+    const next = idx >= 0 ? list.map((x, i) => (i === idx ? session : x)) : [...list, session];
     setState({ intakeSessions: next });
     return session;
   },
 
-  // ——— Health ———
   getHealth() {
     return getState().health;
   },
@@ -197,7 +305,6 @@ export const store = {
     setState({ health: h });
   },
 
-  // ——— Gamification ———
   getProfiles() {
     return getState().profiles;
   },
@@ -205,37 +312,33 @@ export const store = {
     return getState().profiles.find((p) => p.userId === userId) ?? null;
   },
   upsertProfile(p: GamificationProfile) {
+    const normalized = normalizeProfile(p);
     const list = getState().profiles;
-    const idx = list.findIndex((x) => x.userId === p.userId);
-    const next =
-      idx >= 0
-        ? list.map((x, i) => (i === idx ? p : x))
-        : [...list, p];
+    const idx = list.findIndex((x) => x.userId === normalized.userId);
+    const next = idx >= 0 ? list.map((x, i) => (i === idx ? normalized : x)) : [...list, normalized];
     setState({ profiles: next });
-    return p;
+    return normalized;
   },
   getAchievements() {
     return getState().achievements;
   },
   unlockAchievement(userId: string, achievementId: string) {
     const list = getState().achievements;
-    if (list.some((a) => a.userId === userId && a.id === achievementId))
-      return;
+    if (list.some((a) => a.userId === userId && a.id === achievementId)) return;
     const a: Achievement = {
       id: achievementId,
       userId,
       unlockedAt: new Date().toISOString(),
       title: achievementId,
-      description: "",
+      description: '',
     };
     setState({ achievements: [...list, a] });
   },
 
-  // ——— Activity ———
   getActivity(limit = 50) {
     return getState().activity.slice(0, limit);
   },
-  logActivity(event: Omit<ActivityEvent, "id" | "at">) {
+  logActivity(event: Omit<ActivityEvent, 'id' | 'at'>) {
     const e: ActivityEvent = {
       ...event,
       id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -245,14 +348,169 @@ export const store = {
     return e;
   },
 
-  // ——— Seed / reset ———
   seed(data: Partial<StoreState>) {
     setState({ ...getState(), ...data });
   },
   reset() {
-    memory = defaultState();
+    memory = seedFromDefaults(defaultState());
     save(memory);
   },
 };
+
+export function getAssignments() {
+  return store.getAssignments();
+}
+
+export function saveAssignment(assignment: UserAssignment) {
+  store.upsertAssignment(assignment);
+  return getAssignments();
+}
+
+export function getCategories() {
+  return store.getCategories();
+}
+
+export function getAllTasks() {
+  return store.getPunchItems();
+}
+
+export function updateTask(taskId: string, patch: Partial<PunchListItem>) {
+  const current = getAllTasks().find((t) => (t.taskId ?? t.id) === taskId);
+  if (!current) return null;
+  return store.upsertPunchItem({ ...current, ...patch, id: current.id, taskId: current.taskId ?? current.id });
+}
+
+export function updateTaskStatus(taskId: string, status: TaskStatus, userId?: string) {
+  store.updatePunchStatus(taskId, status);
+  if (userId) {
+    store.logActivity({
+      userId,
+      type: 'task_status',
+      summary: `Updated ${taskId} to ${status}`,
+    });
+  }
+}
+
+function isTaskDone(status: TaskStatus) {
+  return ['done', 'completed', 'DONE', 'COMPLETED'].includes(status);
+}
+
+export function getAssignmentForUser(userId: string) {
+  return getAssignments().find((a) => a.userId === userId) ?? null;
+}
+
+export function getConvergedPunchList(userId: string) {
+  const assignment = getAssignmentForUser(userId);
+  const categoryIds = new Set((assignment?.assignedCategories ?? []).map((c) => c.categoryId));
+  return getAllTasks().filter((task) => {
+    if (task.userId === userId) return true;
+    return !task.userId && Boolean(task.categoryId && categoryIds.has(task.categoryId));
+  });
+}
+
+export function getGamification(userId: string) {
+  return (
+    store.getProfile(userId) ??
+    defaultGamification(userId, getAssignmentForUser(userId)?.profile?.fullName)
+  );
+}
+
+export function grantMatrixEditorBadge(userId: string) {
+  const profile = getGamification(userId);
+  if (!profile.badges.includes('matrix-master')) {
+    const updated = normalizeProfile({ ...profile, badges: [...profile.badges, 'matrix-master'] });
+    store.upsertProfile(updated);
+  }
+}
+
+export function completeTaskWithRewards(taskId: string, userId: string, fullName: string) {
+  const task = getAllTasks().find((t) => (t.taskId ?? t.id) === taskId);
+  if (!task) return { profile: getGamification(userId), unlocked: [] as BadgeId[] };
+
+  updateTaskStatus(taskId, 'COMPLETED', userId);
+
+  const current = getGamification(userId);
+  const points = awardXp(current.points, {
+    completed: true,
+    highPriority: (task.priority ?? '').toLowerCase() === 'high',
+    streakDay: true,
+  });
+
+  const completed = getAllTasks().filter((x) => x.userId === userId && isTaskDone(x.status));
+  const categoriesTouched = new Set(completed.map((x) => x.categoryId).filter(Boolean)).size;
+  const currentStreak = current.currentStreak + 1;
+
+  const unlocked = checkAchievements(
+    {
+      completedCount: completed.length,
+      streak: currentStreak,
+      highPriorityDone: completed.some((x) => (x.priority ?? '').toLowerCase() === 'high'),
+      categoriesTouched,
+    },
+    current.badges
+  );
+
+  const nextProfile = normalizeProfile({
+    ...current,
+    userId,
+    fullName,
+    name: fullName,
+    points,
+    currentStreak,
+    streak: currentStreak,
+    tasksCompleted: completed.length,
+    badges: Array.from(new Set([...current.badges, ...unlocked])) as BadgeId[],
+  });
+
+  store.upsertProfile(nextProfile);
+
+  unlocked.forEach((badge) => {
+    store.addNotification({
+      id: `notif-${Date.now()}-${badge}`,
+      userId,
+      title: 'Achievement unlocked',
+      body: badge,
+      type: 'achievement',
+      severity: 'INFO',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+  });
+
+  return { profile: nextProfile, unlocked };
+}
+
+export function getSystemHealth(_userId?: string) {
+  return store.getHealth();
+}
+
+export function getNotifications(userId: string) {
+  return store.getNotifications(userId);
+}
+
+export function markNotificationRead(notificationId: string) {
+  store.markNotificationRead(notificationId);
+}
+
+export function getLeaderboard(): LeaderboardEntry[] {
+  const assignmentsByUser = new Map(getAssignments().map((a) => [a.userId, a]));
+  const rows = store.getProfiles().map((p) => {
+    const assignment = assignmentsByUser.get(p.userId);
+    return {
+      userId: p.userId,
+      fullName: assignment?.profile?.fullName ?? p.fullName ?? p.name ?? p.userId,
+      name: p.name ?? p.fullName,
+      points: p.points,
+      xp: p.xp ?? p.points,
+      level: p.level,
+      tasksCompleted: p.tasksCompleted,
+      badges: p.badges.length,
+    };
+  });
+
+  return leaderboardSort(rows.map((r) => ({ userId: r.userId, name: r.fullName, points: r.points, level: r.level })))
+    .map((sorted) => rows.find((row) => row.userId === sorted.userId)!)
+    .filter(Boolean);
+}
 
 export type { StoreState };

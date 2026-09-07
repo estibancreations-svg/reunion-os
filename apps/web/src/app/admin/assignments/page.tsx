@@ -29,13 +29,13 @@ export default function AssignmentsPage() {
     const rows = [
       ['Name', 'Title', 'Role', 'Categories', 'Received', 'Required', 'Status'],
       ...assignments.map((a) => [
-        a.profile.fullName,
+        a.profile?.fullName ?? a.userName ?? a.userId,
         a.title,
         a.roleTier,
-        a.assignedCategories.map((c) => c.name).join('; '),
-        a.depositStatus.receivedAmount,
-        a.depositStatus.requiredAmount,
-        a.depositStatus.status,
+        (a.assignedCategories ?? []).map((c) => c.name).join('; '),
+        a.depositStatus?.receivedAmount ?? 0,
+        a.depositStatus?.requiredAmount ?? 0,
+        a.depositStatus?.status ?? 'PENDING',
       ]),
     ];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');

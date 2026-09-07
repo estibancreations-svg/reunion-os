@@ -71,7 +71,7 @@ export function AppShell({
             )}
             {user ? (
               <>
-                <span className="text-sm text-slate-400 hidden sm:inline">{user.name}</span>
+                <span className="text-sm text-slate-400 hidden sm:inline">{user.fullName ?? user.name}</span>
                 <button
                   onClick={() => logout()}
                   className="text-xs px-2 py-1 rounded border border-slate-700 hover:bg-slate-800"

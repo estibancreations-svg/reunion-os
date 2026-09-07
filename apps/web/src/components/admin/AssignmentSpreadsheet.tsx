@@ -2,45 +2,70 @@
 
 import React, { useEffect, useState } from 'react';
 import { store } from '../../lib/store';
-import type { UserAssignment } from '../../types';
+import type { UserAssignment, OperationalCategory } from '../../types';
 import { toastSuccess } from '../../lib/toasts';
 
-export function AssignmentSpreadsheet() {
+interface AssignmentSpreadsheetProps {
+  initialAssignments?: UserAssignment[];
+  availableCategories?: OperationalCategory[];
+  onSaveAssignment?: (assignment: UserAssignment) => void;
+  onExport?: () => void;
+  readOnly?: boolean;
+}
+
+export function AssignmentSpreadsheet({
+  initialAssignments,
+  availableCategories = [],
+  onSaveAssignment,
+  onExport,
+  readOnly = false,
+}: AssignmentSpreadsheetProps) {
   const [rows, setRows] = useState<UserAssignment[]>([]);
 
   useEffect(() => {
-    setRows(store.getAssignments());
-  }, []);
+    setRows(initialAssignments ?? store.getAssignments());
+  }, [initialAssignments]);
 
   function refresh() {
     setRows(store.getAssignments());
   }
 
   function addRow() {
+    if (readOnly) return;
     const a: UserAssignment = {
       id: `asg-${Date.now()}`,
+      assignmentId: `asg-${Date.now()}`,
       userId: 'user-demo',
       userName: 'New User',
       categoryId: 'cat-ops',
       categoryName: 'Operations',
       role: 'Contributor',
+      roleTier: 'VOLUNTEER',
       status: 'active',
       startDate: new Date().toISOString().slice(0, 10),
       notes: '',
-    } as any;
+      title: 'Contributor',
+      profile: { fullName: 'New User', email: 'new.user@reunion.demo' },
+      assignedCategories: [{ categoryId: 'cat-ops', name: 'Operations', color: '#3B82F6' }],
+      depositStatus: { requiredAmount: 0, receivedAmount: 0, status: 'PAID' },
+    };
     store.upsertAssignment(a);
+    onSaveAssignment?.(a);
     toastSuccess('Assignment added');
     refresh();
   }
 
   function update(id: string, patch: Partial<UserAssignment>) {
+    if (readOnly) return;
     const current = rows.find((r) => r.id === id);
     if (!current) return;
-    store.upsertAssignment({ ...current, ...patch } as any);
+    const next = store.upsertAssignment({ ...current, ...patch });
+    onSaveAssignment?.(next);
     refresh();
   }
 
   function remove(id: string) {
+    if (readOnly) return;
     store.deleteAssignment(id);
     toastSuccess('Removed');
     refresh();
@@ -50,12 +75,24 @@ export function AssignmentSpreadsheet() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold">Assignment Matrix</h2>
-        <button
-          onClick={addRow}
-          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm"
-        >
-          + Add row
-        </button>
+        <div className="flex items-center gap-2">
+          {onExport && (
+            <button
+              onClick={onExport}
+              className="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-sm"
+            >
+              Export
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              onClick={addRow}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm"
+            >
+              + Add row
+            </button>
+          )}
+        </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <table className="w-full text-sm">
@@ -74,23 +111,50 @@ export function AssignmentSpreadsheet() {
               <tr key={r.id} className="border-t border-slate-800">
                 <td className="px-3 py-2">
                   <input
-                    className="bg-transparent border-b border-slate-700 w-full"
-                    value={(r as any).userName ?? r.userId}
-                    onChange={(e) => update(r.id, { userName: e.target.value } as any)}
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    className="bg-transparent border-b border-slate-700 w-full"
-                    value={(r as any).categoryName ?? r.categoryId}
-                    onChange={(e) => update(r.id, { categoryName: e.target.value } as any)}
+                    disabled={readOnly}
+                    className="bg-transparent border-b border-slate-700 w-full disabled:opacity-70"
+                    value={r.userName ?? r.profile?.fullName ?? r.userId}
+                    onChange={(e) => update(r.id, { userName: e.target.value, profile: { ...r.profile, fullName: e.target.value } })}
                   />
                 </td>
                 <td className="px-3 py-2">
                   <select
-                    className="bg-slate-950 border border-slate-700 rounded px-1"
-                    value={(r as any).role ?? 'Contributor'}
-                    onChange={(e) => update(r.id, { role: e.target.value } as any)}
+                    disabled={readOnly}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 disabled:opacity-70"
+                    value={r.categoryId ?? r.assignedCategories?.[0]?.categoryId ?? 'cat-ops'}
+                    onChange={(e) => {
+                      const category = availableCategories.find(
+                        (c) => (c.categoryId ?? c.id) === e.target.value
+                      );
+                      update(r.id, {
+                        categoryId: e.target.value,
+                        categoryName: category?.name ?? e.target.value,
+                        assignedCategories: [
+                          {
+                            categoryId: e.target.value,
+                            name: category?.name ?? e.target.value,
+                            color: category?.color,
+                          },
+                        ],
+                      });
+                    }}
+                  >
+                    {(availableCategories.length > 0 ? availableCategories : [{ id: 'cat-ops', name: 'Operations' }]).map((c) => {
+                      const id = c.categoryId ?? c.id;
+                      return (
+                        <option key={id} value={id}>
+                          {c.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  <select
+                    disabled={readOnly}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 disabled:opacity-70"
+                    value={r.role ?? r.title ?? 'Contributor'}
+                    onChange={(e) => update(r.id, { role: e.target.value, title: e.target.value })}
                   >
                     <option>Lead</option>
                     <option>Contributor</option>
@@ -99,9 +163,10 @@ export function AssignmentSpreadsheet() {
                 </td>
                 <td className="px-3 py-2">
                   <select
-                    className="bg-slate-950 border border-slate-700 rounded px-1"
-                    value={(r as any).status ?? 'active'}
-                    onChange={(e) => update(r.id, { status: e.target.value } as any)}
+                    disabled={readOnly}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 disabled:opacity-70"
+                    value={r.status ?? 'active'}
+                    onChange={(e) => update(r.id, { status: e.target.value })}
                   >
                     <option>active</option>
                     <option>paused</option>
@@ -110,15 +175,18 @@ export function AssignmentSpreadsheet() {
                 </td>
                 <td className="px-3 py-2">
                   <input
-                    className="bg-transparent border-b border-slate-700 w-full"
-                    value={(r as any).notes ?? ''}
-                    onChange={(e) => update(r.id, { notes: e.target.value } as any)}
+                    disabled={readOnly}
+                    className="bg-transparent border-b border-slate-700 w-full disabled:opacity-70"
+                    value={r.notes ?? ''}
+                    onChange={(e) => update(r.id, { notes: e.target.value })}
                   />
                 </td>
                 <td className="px-3 py-2">
-                  <button onClick={() => remove(r.id)} className="text-red-400 text-xs">
-                    Delete
-                  </button>
+                  {!readOnly && (
+                    <button onClick={() => remove(r.id)} className="text-red-400 text-xs">
+                      Delete
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -135,3 +203,5 @@ export function AssignmentSpreadsheet() {
     </div>
   );
 }
+
+export default AssignmentSpreadsheet;
