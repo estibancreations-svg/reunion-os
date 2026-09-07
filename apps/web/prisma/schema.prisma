@@ -1,0 +1,104 @@
+// Reunion OS — Supabase Postgres schema
+// Local: set DATABASE_URL + DIRECT_URL in .env
+// Deploy: set same env vars in Vercel project settings
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  fullName      String
+  preferredName String?
+  phone         String?
+  ageTier       String    @default("ADULT_18_64")
+  roleTier      String    @default("VOLUNTEER")
+  avatarUrl     String?
+  householdId   String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  lastLoginAt   DateTime?
+  assignments   Assignment[]
+  tasks         Task[]          @relation("AssignedTasks")
+  notifications Notification[]
+  gamification  Gamification?
+}
+
+model Category {
+  id               String   @id @default(cuid())
+  name             String
+  description      String   @default("")
+  isCustom         Boolean  @default(false)
+  color            String   @default("#C84B31")
+  icon             String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tasks            Task[]
+  assignmentLinks  AssignmentCategory[]
+}
+
+model Assignment {
+  id                       String   @id @default(cuid())
+  userId                   String
+  title                    String
+  roleTier                 String
+  specificResponsibilities String
+  notes                    String?
+  assignedBy               String
+  assignedAt               DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  user                     User     @relation(fields: [userId], references: [id])
+  categories               AssignmentCategory[]
+}
+
+model AssignmentCategory {
+  assignmentId String
+  categoryId   String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  @@id([assignmentId, categoryId])
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  status      String   @default("TODO")
+  priority    String   @default("MEDIUM")
+  categoryId  String?
+  assigneeId  String?
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category? @relation(fields: [categoryId], references: [id])
+  assignee    User?     @relation("AssignedTasks", fields: [assigneeId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String   @default("")
+  type      String   @default("info")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Gamification {
+  id        String @id @default(cuid())
+  userId    String @unique
+  xp        Int    @default(0)
+  level     Int    @default(1)
+  streak    Int    @default(0)
+  user      User   @relation(fields: [userId], references: [id])
+}
