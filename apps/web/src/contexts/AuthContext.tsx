@@ -8,6 +8,7 @@ interface AuthContextValue {
   user: SessionUser | null;
   isLoading: boolean;
   loginAs: (userId: string) => Promise<boolean>;
+  refreshSession: () => Promise<boolean>;
   logout: () => Promise<void>;
   hasRole: (...roles: RoleTier[]) => boolean;
   canEditMatrix: boolean;
@@ -16,19 +17,55 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function ensureLocalAssignmentForUser(user: SessionUser) {
+  const existing = store.getAssignments().some((a) => a.userId === user.userId);
+  if (existing) return;
+  store.upsertAssignment({
+    id: `asg-${user.userId}`,
+    assignmentId: `asg-${user.userId}`,
+    userId: user.userId,
+    userName: user.fullName,
+    title: 'Member',
+    roleTier: user.roleTier,
+    role: 'Member',
+    status: 'active',
+    profile: {
+      fullName: user.fullName ?? user.name ?? user.userId,
+      email: user.email,
+    },
+    categoryId: 'cat-ops',
+    categoryName: 'Operations',
+    assignedCategories: [{ categoryId: 'cat-ops', name: 'Operations', color: '#3B82F6' }],
+    depositStatus: { requiredAmount: 0, receivedAmount: 0, status: 'PAID' },
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok || !json?.data?.userId) return false;
+      const session = json.data as SessionUser;
+      setUser(session);
+      store.setCurrentUser(session.userId);
+      ensureLocalAssignmentForUser(session);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch('/api/auth/session', { cache: 'no-store' });
-        const json = await res.json().catch(() => ({}));
-        if (mounted && res.ok && json?.ok && json?.data?.userId) {
-          setUser(json.data as SessionUser);
-          store.setCurrentUser(json.data.userId as string);
+        const ok = await refreshSession();
+        if (mounted && !ok) {
+          store.setCurrentUser(null);
         }
       } catch {
         // ignore
@@ -40,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [refreshSession]);
 
   const loginAs = useCallback(async (userId: string) => {
     try {
@@ -54,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const session = json.data as SessionUser;
       setUser(session);
       store.setCurrentUser(session.userId);
+      ensureLocalAssignmentForUser(session);
       return true;
     } catch {
       return false;
@@ -79,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canRunIntake = hasRole('SUPER_ADMIN', 'COMMITTEE_CHAIR');
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginAs, logout, hasRole, canEditMatrix, canRunIntake }}>
+    <AuthContext.Provider value={{ user, isLoading, loginAs, refreshSession, logout, hasRole, canEditMatrix, canRunIntake }}>
       {children}
     </AuthContext.Provider>
   );
