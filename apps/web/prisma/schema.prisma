@@ -1,0 +1,187 @@
+// Reunion OS — Supabase Postgres schema
+// Local: set DATABASE_URL + DIRECT_URL in .env
+// Deploy: set same env vars in Vercel project settings
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  fullName      String
+  preferredName String?
+  phone         String?
+  ageTier       String    @default("ADULT_18_64")
+  roleTier      String    @default("VOLUNTEER")
+  avatarUrl     String?
+  householdId   String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  lastLoginAt   DateTime?
+  assignments   Assignment[]
+  tasks         Task[]          @relation("AssignedTasks")
+  comments      TaskComment[]
+  notifications Notification[]
+  ledger        LedgerEntry[]
+  auditEvents   AuditEvent[]    @relation("ActorEvents")
+  gamification  Gamification?
+}
+
+model Category {
+  id               String   @id @default(cuid())
+  name             String
+  description      String   @default("")
+  isCustom         Boolean  @default(false)
+  color            String   @default("#C84B31")
+  icon             String?
+  parentCategoryId String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tasks            Task[]
+  assignmentLinks  AssignmentCategory[]
+}
+
+model Assignment {
+  id                       String   @id @default(cuid())
+  userId                   String
+  title                    String
+  roleTier                 String
+  specificResponsibilities String
+  notes                    String?
+  assignedBy               String
+  assignedAt               DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  requiredAmount           Float    @default(500)
+  receivedAmount           Float    @default(0)
+  depositStatus            String   @default("NOT_STARTED")
+  layawayMonthsTotal       Int      @default(0)
+  layawayMonthsPaid        Int      @default(0)
+  nextDueDate              String?
+  user                     User     @relation(fields: [userId], references: [id])
+  categories               AssignmentCategory[]
+  ledger                   LedgerEntry[]
+}
+
+model AssignmentCategory {
+  assignmentId String
+  categoryId   String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  @@id([assignmentId, categoryId])
+}
+
+model Task {
+  id                  String    @id @default(cuid())
+  title               String
+  description         String?
+  categoryId          String
+  assignedUserId      String?
+  dueDateUtc          DateTime
+  status              String    @default("PENDING")
+  priority            String    @default("MEDIUM")
+  requiresPhotoProof  Boolean   @default(false)
+  requiresReceipt     Boolean   @default(false)
+  uploadedProofUrls   String    @default("[]")
+  uploadedReceiptUrls String    @default("[]")
+  estimatedCost       Float?
+  actualCost          Float?
+  tags                String    @default("[]")
+  pointsValue         Int       @default(20)
+  blockedReason       String?
+  completedAt         DateTime?
+  completedBy         String?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  category            Category  @relation(fields: [categoryId], references: [id])
+  assignedUser        User?     @relation("AssignedTasks", fields: [assignedUserId], references: [id])
+  comments            TaskComment[]
+}
+
+model TaskComment {
+  id         String   @id @default(cuid())
+  taskId     String
+  authorId   String
+  body       String
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id])
+}
+
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  userId        String
+  assignmentId  String?
+  amount        Float
+  currency      String   @default("USD")
+  type          String
+  method        String
+  note          String?
+  recordedBy    String
+  recordedAt    DateTime @default(now())
+  relatedTaskId String?
+  user          User     @relation(fields: [userId], references: [id])
+  assignment    Assignment? @relation(fields: [assignmentId], references: [id])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  channel   String    @default("IN_APP")
+  severity  String    @default("INFO")
+  readAt    DateTime?
+  link      String?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model IntakeSession {
+  id                   String    @id @default(cuid())
+  status               String    @default("IN_PROGRESS")
+  answers              String    @default("[]")
+  generatedCategoryIds String    @default("[]")
+  generatedTaskIds     String    @default("[]")
+  createdBy            String
+  startedAt            DateTime  @default(now())
+  completedAt          DateTime?
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  before     String?
+  after      String?
+  timestamp  DateTime @default(now())
+  actor      User     @relation("ActorEvents", fields: [actorId], references: [id])
+}
+
+model Gamification {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  points             Int      @default(0)
+  level              Int      @default(1)
+  currentStreak      Int      @default(0)
+  longestStreak      Int      @default(0)
+  badges             String   @default("[]")
+  tasksCompleted     Int      @default(0)
+  onTimeCompletions  Int      @default(0)
+  lastActivityDate   String?
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
