@@ -29,6 +29,8 @@ model User {
   tasks         Task[]          @relation("AssignedTasks")
   notifications Notification[]
   gamification  Gamification?
+  achievements  UserAchievement[]
+  intakeSessions IntakeSession[]
   commsMemberships CommsChannelMember[]
   commsMessages    CommsMessage[]
   commsReads       CommsMessageRead[]
@@ -94,6 +96,7 @@ model Notification {
   body      String   @default("")
   type      String   @default("info")
   read      Boolean  @default(false)
+  readAt    DateTime?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 }
@@ -105,6 +108,25 @@ model Gamification {
   level     Int    @default(1)
   streak    Int    @default(0)
   user      User   @relation(fields: [userId], references: [id])
+}
+
+model UserAchievement {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model IntakeSession {
+  id          String   @id @default(cuid())
+  userId      String
+  answersJson String
+  status      String   @default("completed")
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CommsChannel {
