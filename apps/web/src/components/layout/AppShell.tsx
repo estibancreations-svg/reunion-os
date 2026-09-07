@@ -27,12 +27,15 @@ export function AppShell({
           { href: '/admin/intake', label: 'Intake' },
           { href: '/admin/activity', label: 'Activity' },
           { href: '/admin/leaderboard', label: 'Leaderboard' },
+          { href: '/comms', label: 'Comms' },
+          { href: '/admin/benchmark', label: 'Benchmark' },
         ]
       : variant === 'user'
         ? [
             { href: '/user/punchlist', label: 'My Punch List' },
             { href: '/user/notifications', label: 'Notifications' },
             { href: '/user/achievements', label: 'Achievements' },
+            { href: '/comms', label: 'Comms' },
           ]
         : [];
 

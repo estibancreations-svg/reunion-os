@@ -9,6 +9,8 @@ const cards = [
   { href: '/admin/intake', title: 'Intake Wizard', desc: 'Guided event setup questionnaire' },
   { href: '/admin/activity', title: 'Activity', desc: 'Recent system events' },
   { href: '/admin/leaderboard', title: 'Leaderboard', desc: 'XP and streaks' },
+  { href: '/comms', title: 'Comms Hub', desc: 'Chat, chirp audio, and one-tap call handoff' },
+  { href: '/admin/benchmark', title: 'Benchmark', desc: 'Top-200 pattern coverage and risk radar' },
 ];
 
 export default function AdminDashboard() {

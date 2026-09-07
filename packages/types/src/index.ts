@@ -196,3 +196,43 @@ export interface UserProfile {
   level?: number;
   streak?: number;
 }
+
+export type CommsPresenceStatus = 'online' | 'away' | 'offline';
+
+export interface CommsChannel {
+  id: string;
+  name: string;
+  description?: string;
+  memberUserIds: string[];
+  lastMessageAt: string;
+}
+
+export type CommsMessageType = 'text' | 'chirp' | 'system';
+
+export interface CommsMessage {
+  id: string;
+  channelId: string;
+  senderUserId: string;
+  senderName: string;
+  type: CommsMessageType;
+  body?: string;
+  audioUrl?: string;
+  durationSec?: number;
+  mentions?: string[];
+  createdAt: string;
+  readByUserIds: string[];
+}
+
+export interface CommsPresence {
+  userId: string;
+  userName: string;
+  status: CommsPresenceStatus;
+  updatedAt: string;
+}
+
+export interface CommsTypingState {
+  channelId: string;
+  userId: string;
+  userName: string;
+  updatedAt: string;
+}
