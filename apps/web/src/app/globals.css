@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0f0d0c;
+  color: #fdfbf7;
+}
+
+.font-serif {
+  font-family: 'Instrument Serif', Georgia, serif;
+}
+
+:focus-visible {
+  outline: 2px solid #c84b31;
+  outline-offset: 2px;
+}
+
+@keyframes confettiPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.quest-complete-flash {
+  animation: confettiPulse 0.45s ease-in-out 2;
+}
