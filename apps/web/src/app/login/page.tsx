@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAssignments } from '../../lib/store';
 import { AppShell } from '../../components/layout/AppShell';
@@ -8,6 +9,7 @@ import { AppShell } from '../../components/layout/AppShell';
 export default function LoginPage() {
   const { loginAs, user } = useAuth();
   const router = useRouter();
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const people = typeof window !== 'undefined' ? getAssignments() : [];
 
   if (user) {
@@ -23,15 +25,21 @@ export default function LoginPage() {
         {people.map((a) => (
           <button
             key={a.userId}
-            onClick={() => {
-              loginAs(a.userId);
+            disabled={busyUserId === a.userId}
+            onClick={async () => {
+              setBusyUserId(a.userId);
+              const ok = await loginAs(a.userId);
+              if (!ok) {
+                setBusyUserId(null);
+                return;
+              }
               const dest =
                 a.roleTier === 'VOLUNTEER' || a.roleTier === 'GUEST'
                   ? '/user/punchlist'
                   : '/admin';
               router.push(dest);
             }}
-            className="w-full text-left px-5 py-4 bg-[#1A1615] border border-[#3F3A36] rounded-xl hover:border-[#C84B31] transition flex justify-between items-center"
+            className="w-full text-left px-5 py-4 bg-[#1A1615] border border-[#3F3A36] rounded-xl hover:border-[#C84B31] transition flex justify-between items-center disabled:opacity-60"
           >
             <div>
               <div className="font-semibold text-[#FDFBF7]">{a.profile?.fullName ?? a.userName ?? a.userId}</div>
