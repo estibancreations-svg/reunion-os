@@ -25,12 +25,12 @@ export default function CategoriesPage() {
       <div className="space-y-4">
         {cats.map((c) => {
           const people = getAssignments().filter((a) =>
-            a.assignedCategories.some((x) => x.categoryId === c.categoryId)
+            (a.assignedCategories ?? []).some((x) => x.categoryId === (c.categoryId ?? c.id))
           ).length;
-          const tasks = getAllTasks().filter((t) => t.categoryId === c.categoryId).length;
+          const tasks = getAllTasks().filter((t) => t.categoryId === (c.categoryId ?? c.id)).length;
           return (
             <div
-              key={c.categoryId}
+              key={c.categoryId ?? c.id}
               className="bg-[#1A1615] border border-[#3F3A36] rounded-2xl p-5 flex items-center gap-4"
             >
               <div
@@ -48,7 +48,7 @@ export default function CategoriesPage() {
                 </div>
                 <p className="text-sm text-[#A89F91]">{c.description}</p>
                 <p className="text-xs text-[#5C544D] mt-1">
-                  {people} people · {tasks} tasks · {c.categoryId}
+                  {people} people · {tasks} tasks · {c.categoryId ?? c.id}
                 </p>
               </div>
             </div>

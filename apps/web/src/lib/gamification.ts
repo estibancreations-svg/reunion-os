@@ -2,12 +2,23 @@
  * XP, levels, streaks, achievements.
  */
 
+import type { BadgeId, GamificationProfile } from '@/types';
+
 export const XP_PER_TASK = 50;
 export const XP_PER_HIGH_PRIORITY = 25;
 export const STREAK_BONUS = 10;
 
+export const BADGE_META: Record<BadgeId, { name: string; description: string; icon: string }> = {
+  'first-task': { name: 'First Steps', description: 'Complete your first task', icon: '👣' },
+  'streak-3': { name: 'On a Roll', description: 'Maintain a 3-day streak', icon: '🔥' },
+  'streak-7': { name: 'Week Warrior', description: 'Maintain a 7-day streak', icon: '🏅' },
+  'ten-tasks': { name: 'Task Master', description: 'Complete 10 tasks', icon: '✅' },
+  'high-priority': { name: 'Crisis Averted', description: 'Complete a high-priority task', icon: '🚨' },
+  'all-categories': { name: 'Full Spectrum', description: 'Contribute across 3+ categories', icon: '🌈' },
+  'matrix-master': { name: 'Matrix Master', description: 'Edited assignment matrix', icon: '📊' },
+};
+
 export function levelFromXp(xp: number): number {
-  // simple curve: level n requires ~100 * n^1.5 xp
   let level = 1;
   let need = 100;
   let remaining = xp;
@@ -34,16 +45,22 @@ export function xpToNextLevel(xp: number): { current: number; next: number; pct:
   };
 }
 
-export const ACHIEVEMENTS = [
-  { id: "first-task", title: "First Steps", description: "Complete your first punch-list item", xp: 50 },
-  { id: "streak-3", title: "On a Roll", description: "3-day activity streak", xp: 75 },
-  { id: "streak-7", title: "Week Warrior", description: "7-day activity streak", xp: 150 },
-  { id: "ten-tasks", title: "Task Master", description: "Complete 10 items", xp: 100 },
-  { id: "high-priority", title: "Crisis Averted", description: "Complete a high-priority item", xp: 50 },
-  { id: "all-categories", title: "Full Spectrum", description: "Contribute across 3+ categories", xp: 120 },
-] as const;
+export const pointsToNextLevel = xpToNextLevel;
 
-export type AchievementId = (typeof ACHIEVEMENTS)[number]["id"];
+export function defaultGamification(userId: string, fullName?: string): GamificationProfile {
+  return {
+    userId,
+    fullName,
+    name: fullName,
+    points: 0,
+    xp: 0,
+    level: 1,
+    currentStreak: 0,
+    streak: 0,
+    tasksCompleted: 0,
+    badges: [],
+  };
+}
 
 export function awardXp(
   currentXp: number,
@@ -63,23 +80,23 @@ export function checkAchievements(
     highPriorityDone: boolean;
     categoriesTouched: number;
   },
-  alreadyUnlocked: string[]
-): string[] {
-  const newly: string[] = [];
-  const has = (id: string) => alreadyUnlocked.includes(id) || newly.includes(id);
+  alreadyUnlocked: BadgeId[]
+): BadgeId[] {
+  const newly: BadgeId[] = [];
+  const has = (id: BadgeId) => alreadyUnlocked.includes(id) || newly.includes(id);
 
-  if (stats.completedCount >= 1 && !has("first-task")) newly.push("first-task");
-  if (stats.streak >= 3 && !has("streak-3")) newly.push("streak-3");
-  if (stats.streak >= 7 && !has("streak-7")) newly.push("streak-7");
-  if (stats.completedCount >= 10 && !has("ten-tasks")) newly.push("ten-tasks");
-  if (stats.highPriorityDone && !has("high-priority")) newly.push("high-priority");
-  if (stats.categoriesTouched >= 3 && !has("all-categories")) newly.push("all-categories");
+  if (stats.completedCount >= 1 && !has('first-task')) newly.push('first-task');
+  if (stats.streak >= 3 && !has('streak-3')) newly.push('streak-3');
+  if (stats.streak >= 7 && !has('streak-7')) newly.push('streak-7');
+  if (stats.completedCount >= 10 && !has('ten-tasks')) newly.push('ten-tasks');
+  if (stats.highPriorityDone && !has('high-priority')) newly.push('high-priority');
+  if (stats.categoriesTouched >= 3 && !has('all-categories')) newly.push('all-categories');
 
   return newly;
 }
 
 export function leaderboardSort(
-  profiles: { userId: string; name: string; xp: number; level: number }[]
+  profiles: { userId: string; name: string; points: number; level: number }[]
 ) {
-  return [...profiles].sort((a, b) => b.xp - a.xp || b.level - a.level);
+  return [...profiles].sort((a, b) => b.points - a.points || b.level - a.level);
 }

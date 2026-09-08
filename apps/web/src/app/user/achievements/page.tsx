@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/layout/AppShell';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getGamification } from '../../../lib/store';
+import { fetchGamificationApi } from '../../../lib/appApi';
 import { BADGE_META, pointsToNextLevel, defaultGamification } from '../../../lib/gamification';
 import type { BadgeId, GamificationProfile } from '../../../types';
 import { GameHUD } from '../../../components/game/GameHUD';
@@ -13,10 +13,16 @@ export default function AchievementsPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<GamificationProfile | null>(null);
+  const [source, setSource] = useState<'api' | 'local'>('local');
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
-    if (user) setProfile(getGamification(user.userId));
+    if (user) {
+      fetchGamificationApi(user).then((res) => {
+        setProfile(res.data);
+        setSource(res.source);
+      });
+    }
   }, [user, isLoading, router]);
 
   if (isLoading || !user) return null;
@@ -26,6 +32,7 @@ export default function AchievementsPage() {
   return (
     <AppShell variant="user" title="Achievements">
       <div className="space-y-6 max-w-2xl">
+        <div className="text-xs text-slate-500">Data source: {source}</div>
         <GameHUD profile={g} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {allBadges.map((id) => {

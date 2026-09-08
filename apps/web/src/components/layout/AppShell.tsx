@@ -27,12 +27,15 @@ export function AppShell({
           { href: '/admin/intake', label: 'Intake' },
           { href: '/admin/activity', label: 'Activity' },
           { href: '/admin/leaderboard', label: 'Leaderboard' },
+          { href: '/comms', label: 'Comms' },
+          { href: '/admin/benchmark', label: 'Benchmark' },
         ]
       : variant === 'user'
         ? [
             { href: '/user/punchlist', label: 'My Punch List' },
             { href: '/user/notifications', label: 'Notifications' },
             { href: '/user/achievements', label: 'Achievements' },
+            { href: '/comms', label: 'Comms' },
           ]
         : [];
 
@@ -71,7 +74,7 @@ export function AppShell({
             )}
             {user ? (
               <>
-                <span className="text-sm text-slate-400 hidden sm:inline">{user.name}</span>
+                <span className="text-sm text-slate-400 hidden sm:inline">{user.fullName ?? user.name}</span>
                 <button
                   onClick={() => logout()}
                   className="text-xs px-2 py-1 rounded border border-slate-700 hover:bg-slate-800"

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SESSION_COOKIE, decodeSessionCookie } from "@/lib/session";
 
-// Demo middleware — protect /admin and /user routes by requiring a simple cookie.
-// Replace with Supabase Auth session check for production.
+// Route protection middleware with session cookie validation.
 
-const PROTECTED = ["/admin", "/user"];
+const PROTECTED = ["/admin", "/user", "/comms"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -15,11 +15,8 @@ export function middleware(req: NextRequest) {
 
   if (!needsAuth) return NextResponse.next();
 
-  // Demo: accept any session cookie or query ?demo=1
-  const session = req.cookies.get("reunion_session")?.value;
-  const demo = req.nextUrl.searchParams.get("demo");
-
-  if (session || demo === "1") {
+  const session = decodeSessionCookie(req.cookies.get(SESSION_COOKIE)?.value);
+  if (session) {
     return NextResponse.next();
   }
 
@@ -29,5 +26,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/user/:path*"],
+  matcher: ["/admin/:path*", "/user/:path*", "/comms/:path*"],
 };

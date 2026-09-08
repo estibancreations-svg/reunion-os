@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/layout/AppShell';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getNotifications, markNotificationRead } from '../../../lib/store';
+import { fetchNotificationsApi, markNotificationReadApi } from '../../../lib/appApi';
 import { Badge } from '../../../components/ui/Badge';
 import type { Notification } from '../../../types';
 
@@ -12,10 +12,16 @@ export default function NotificationsPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<Notification[]>([]);
+  const [source, setSource] = useState<'api' | 'local'>('local');
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
-    if (user) setItems(getNotifications(user.userId));
+    if (user) {
+      fetchNotificationsApi(user).then((res) => {
+        setItems(res.data);
+        setSource(res.source);
+      });
+    }
   }, [user, isLoading, router]);
 
   if (isLoading || !user) return null;
@@ -23,15 +29,18 @@ export default function NotificationsPage() {
   return (
     <AppShell variant="user" title="Notifications">
       <div className="max-w-xl space-y-3">
+        <div className="text-xs text-slate-500">Data source: {source}</div>
         {items.length === 0 && (
           <p className="text-[#8D7B68] text-center py-12">No notifications yet.</p>
         )}
         {items.map((n) => (
           <button
-            key={n.notificationId}
-            onClick={() => {
-              markNotificationRead(n.notificationId);
-              setItems(getNotifications(user.userId));
+            key={n.notificationId ?? n.id}
+            onClick={async () => {
+              await markNotificationReadApi(user, n.notificationId ?? n.id);
+              const next = await fetchNotificationsApi(user);
+              setItems(next.data);
+              setSource(next.source);
               if (n.link) router.push(n.link);
             }}
             className={`w-full text-left p-4 rounded-xl border transition ${

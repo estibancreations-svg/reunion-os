@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { store } from '../../lib/store';
 import { toastSuccess } from '../../lib/toasts';
+import { submitIntakeApi } from '../../lib/appApi';
 
 const QUESTIONS = [
   { id: 'eventName', label: 'What is the name of this reunion / event?', type: 'text', required: true },
@@ -22,6 +23,8 @@ export function IntakeWizard() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | boolean | number>>({});
   const [done, setDone] = useState(false);
+  const [source, setSource] = useState<'api' | 'local' | null>(null);
+  const [tasksCreated, setTasksCreated] = useState<number>(0);
 
   const q = QUESTIONS[step];
   const progress = Math.round(((step + 1) / QUESTIONS.length) * 100);
@@ -35,24 +38,34 @@ export function IntakeWizard() {
     else finish();
   }
 
-  function finish() {
+  async function finish() {
+    if (!user) return;
+    const answerRows = Object.entries(answers).map(([questionId, value]) => ({
+      questionId,
+      value,
+    }));
     const session = {
       id: `intake-${Date.now()}`,
-      userId: user?.userId ?? 'anon',
-      answers: Object.entries(answers).map(([questionId, value]) => ({
-        questionId,
-        value,
-      })),
+      userId: user.userId,
+      answers: answerRows,
       createdAt: new Date().toISOString(),
       status: 'completed' as const,
     };
+    const result = await submitIntakeApi(user, answerRows);
+    setSource(result.source);
+    setTasksCreated(result.tasksCreated);
     store.saveIntakeSession(session as any);
     store.logActivity({
-      userId: user?.userId ?? 'anon',
+      userId: user.userId,
       type: 'intake_complete',
       summary: 'Completed intake wizard',
     });
-    toastSuccess('Intake saved', 'Punch-list suggestions can be generated next.');
+    toastSuccess(
+      'Intake saved',
+      result.source === 'api'
+        ? `${result.tasksCreated} tasks generated for assignment.`
+        : 'Saved locally (API unavailable).'
+    );
     setDone(true);
   }
 
@@ -61,6 +74,9 @@ export function IntakeWizard() {
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center">
         <h2 className="text-xl font-semibold text-emerald-400 mb-2">Intake complete</h2>
         <p className="text-slate-400">Session stored. Use the matrix or punch-list to assign follow-ups.</p>
+        <p className="text-xs text-slate-500 mt-2">
+          Source: {source ?? 'local'} {source === 'api' ? `· Tasks generated: ${tasksCreated}` : ''}
+        </p>
       </div>
     );
   }
