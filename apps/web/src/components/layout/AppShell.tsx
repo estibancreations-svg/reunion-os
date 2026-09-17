@@ -28,6 +28,7 @@ export function AppShell({
           { href: '/admin/activity', label: 'Activity' },
           { href: '/admin/leaderboard', label: 'Leaderboard' },
           { href: '/comms', label: 'Comms' },
+          ...(canEditMatrix ? [{ href: '/admin/intelligence', label: 'Intelligence' }] : []),
           { href: '/admin/benchmark', label: 'Benchmark' },
         ]
       : variant === 'user'

@@ -16,6 +16,10 @@ const QUESTIONS = [
   { id: 'hasKidsActivities', label: 'Dedicated kids activities?', type: 'boolean' },
   { id: 'hasVenue', label: 'Need venue / parking logistics?', type: 'boolean' },
   { id: 'hasSecurity', label: 'Need security / first-aid?', type: 'boolean' },
+  { id: 'needsAirportPickup', label: 'Need airport pickup coordination or arrival tracking?', type: 'boolean' },
+  { id: 'needsTravelMonitoring', label: 'Need route or travel disruption monitoring?', type: 'boolean' },
+  { id: 'needsPortCoordination', label: 'Need ferry, cruise, or port coordination visibility?', type: 'boolean' },
+  { id: 'needsWeatherMonitoring', label: 'Need weather watch or outdoor operations monitoring?', type: 'boolean' },
 ];
 
 export function IntakeWizard() {

@@ -60,6 +60,34 @@ function buildSuggestedTasks(answers: IntakeAnswer[]) {
       priority: 'HIGH',
     });
   }
+  if (asBool(answerMap.get('needsAirportPickup'))) {
+    tasks.push({
+      title: 'Prepare airport pickup command plan',
+      description: 'Track arrivals, driver assignments, and pickup fallback windows for incoming guests.',
+      priority: 'HIGH',
+    });
+  }
+  if (asBool(answerMap.get('needsTravelMonitoring'))) {
+    tasks.push({
+      title: 'Enable travel route monitoring watch',
+      description: 'Monitor route disruptions and prepare alternate movement plans for key arrivals.',
+      priority: 'MEDIUM',
+    });
+  }
+  if (asBool(answerMap.get('needsPortCoordination'))) {
+    tasks.push({
+      title: 'Set port and waterfront coordination watch',
+      description: 'Review ferry, cruise, or port-side constraints that may affect guest movement.',
+      priority: 'MEDIUM',
+    });
+  }
+  if (asBool(answerMap.get('needsWeatherMonitoring'))) {
+    tasks.push({
+      title: 'Set weather contingency watch',
+      description: 'Monitor conditions that could affect outdoor operations, travel timing, or venue access.',
+      priority: 'HIGH',
+    });
+  }
 
   return tasks.slice(0, 12);
 }

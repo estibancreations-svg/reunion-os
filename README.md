@@ -2,6 +2,8 @@
 
 Operational system for reunion / event planning — assignments, punch lists, intake wizard, gamification, admin matrix.
 
+Includes an admin-only Operations Intelligence surface that can point at a separately deployed OSIRIS instance for read-only situational awareness.
+
 ## Quick start (demo)
 
 ```bash
@@ -22,6 +24,7 @@ Opens at http://localhost:3000. Uses `localStorage` — no database required.
    - `NEXT_PUBLIC_SITE_URL`
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_OSIRIS_URL` (optional separate OSIRIS host/subdomain)
 4. Deploy. Run `npx prisma db push` when ready for multi-user.
 
 ## Structure
